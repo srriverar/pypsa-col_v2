@@ -13,6 +13,7 @@ six locked selectors, constraints, solver, sequential/parallel run_config, then
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from datetime import date, datetime, timedelta
@@ -25,6 +26,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 os.environ.setdefault("MPLBACKEND", "Agg")
+for _log_name in ("pypsa", "linopy", "linopy.io", "linopy.model", "linopy.constants"):
+    logging.getLogger(_log_name).setLevel(logging.ERROR)
 
 import pandas as pd
 import streamlit as st
@@ -571,9 +574,17 @@ introdujo PyPSA-CL para expansión eléctrica. Aquí hacemos lo mismo: un modelo
         c1.button("Cerrar escenario y ponerlo en la cola", on_click=_add_scenario)
         c2.button("Remove scenario", on_click=_remove_scenario)
 
-        st.button("Resolver todos los escenarios de la cola (HiGHS)", type="primary", on_click=_run_all)
+        if st.button("Resolver todos los escenarios de la cola (HiGHS)", type="primary", key="btn_run_all"):
+            with st.spinner(
+                "HiGHS está resolviendo. Puede tardar 1–2 min por época. "
+                "No recargue la página; el log de Manage app se llena con el simplex, no es un error."
+            ):
+                _run_all()
         if st.session_state.run_log:
-            st.success(st.session_state.run_log)
+            if str(st.session_state.run_log).startswith("ERROR"):
+                st.error(st.session_state.run_log)
+            else:
+                st.success(st.session_state.run_log)
 
         js = None
         if st.session_state.scenarios or st.session_state.epochs:
