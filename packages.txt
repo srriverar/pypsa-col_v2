@@ -1,0 +1,4 @@
+libgomp1
+gdal-bin
+libgeos-dev
+libproj-dev

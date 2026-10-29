@@ -1,0 +1,32 @@
+{
+  "stn": {
+    "topology": "stn_physical_paratec_tesis",
+    "electrical_kvl": true,
+    "thesis_reported": {
+      "buses": 147,
+      "lines": 206,
+      "transformers": 34
+    },
+    "this_extract": {
+      "buses": 144,
+      "lines": 194,
+      "transformers": 19,
+      "generators": 77
+    },
+    "source": "JuanMoreno2000/Tesis_RedTransmisionColombia + tesis de maestría 2026 §3",
+    "n_minus_1": "corridor s_nom = installed MVA − largest circuit",
+    "note": "Master's 147/206/34 uses a later PARATEC dump with explicit transformer records; this reconstruction uses the published 220/230/500 kV line list and infers transformers at multi-kV sites."
+  },
+  "clustered18": {
+    "topology": "clustered_18_subareas",
+    "electrical_kvl": false,
+    "n_subareas": 18,
+    "links": 37,
+    "source": "tesis Moreno 2026 §4 — aggregation of El Modelo STN",
+    "n_minus_1": "sum of STN corridor N-1 ratings between subareas"
+  },
+  "paths": {
+    "stn": "/home/user/pypsa-col/data/streamlit/networks/stn-tesis.nc",
+    "clustered18": "/home/user/pypsa-col/data/streamlit/networks/clustered-18.nc"
+  }
+}

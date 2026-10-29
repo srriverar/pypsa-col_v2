@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>PyPSA-col — SIN Colombia</title>
+<style>
+  :root { --ink:#1b2a41; --paper:#f4f1ea; --card:#fff; --orange:#b85716; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Segoe UI, system-ui, sans-serif; background:var(--paper); color:var(--ink); }
+  header { display:flex; gap:16px; align-items:center; padding:14px 20px; background:var(--card); border-bottom:1px solid #e2d9c8; }
+  .flag { width:68px; height:68px; border-radius:10px; flex:0 0 68px; background:linear-gradient(#FCD116 0 33%,#003893 33% 66%,#CE1126 66% 100%); }
+  h1 { margin:0; font-size:1.45rem; }
+  .cap { color:#3d4f63; font-size:.9rem; margin-top:4px; line-height:1.4; max-width:920px; }
+  nav.main { display:flex; gap:2px; padding:8px 14px 0; background:var(--card); border-bottom:1px solid #e2d9c8; flex-wrap:wrap; }
+  nav.main button, nav.sub button {
+    border:0; background:transparent; padding:10px 12px; cursor:pointer;
+    color:#3d4f63; font-weight:700; border-bottom:3px solid transparent; white-space:nowrap;
+  }
+  nav.main button.on, nav.sub button.on { color:var(--ink); border-bottom-color:var(--orange); }
+  .wrap { padding:16px 20px 56px; max-width:1180px; }
+  .box { background:var(--card); border:1px solid #d9d2c5; border-left:5px solid var(--orange); padding:12px 14px; margin:10px 0 14px; line-height:1.5; }
+  .date { background:#fff8e8; border:1px solid #e0c48a; border-left:5px solid var(--orange); padding:10px 14px; margin:10px 0 14px; }
+  .cols { display:grid; grid-template-columns:1.1fr 1.1fr .9fr; gap:16px; }
+  @media (max-width:980px){ .cols { grid-template-columns:1fr; } }
+  h3 { margin:4px 0 10px; }
+  label { display:block; font-weight:700; font-size:.8rem; margin:8px 0 4px; }
+  input, select { width:100%; padding:8px; border:1px solid #cfc6b6; border-radius:6px; background:#fff; }
+  .btn { background:var(--orange); color:#fff; border:0; padding:10px 16px; border-radius:8px; font-weight:700; cursor:pointer; margin-top:12px; }
+  .btn:disabled { opacity:.55; cursor:wait; }
+  table { width:100%; border-collapse:collapse; background:#fff; font-size:.88rem; }
+  th, td { border:1px solid #e2d9c8; padding:6px 8px; text-align:left; }
+  img.map { width:100%; border:1px solid #d9d2c5; border-radius:8px; margin:8px 0; background:#fff; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .hidden { display:none !important; }
+  #status { margin-top:10px; font-weight:600; }
+  .ok { color:#155e56; } .err { color:#922b21; }
+  .sin { height:200px; border-radius:8px; border:1px solid #d9d2c5;
+    background: radial-gradient(circle at 38% 42%, #2a9d8f 0 7px, transparent 8px),
+                radial-gradient(circle at 58% 55%, #f4a261 0 9px, transparent 10px),
+                linear-gradient(#dce8f5,#c5d6c0); }
+</style>
+</head>
+<body>
+<header>
+  <div class="flag" title="Colombia"></div>
+  <div>
+    <h1>PyPSA-col — Long-term Power Systems Planning in Colombia</h1>
+    <div class="cap">SIN · XM DemaReal / CEN · malla OSM · HiGHS · GUI fiel a PyPSA-CL · esta vista corre <b>aquí</b> (HTTP). Hojas XM = último mes D-1. Tres modelos: STN, 18 subáreas, 7 nodos.</div>
+  </div>
+</header>
+<nav class="main" id="mainnav">
+  <button class="on" data-p="gui">🎛️ GUI (PyPSA-COL)</button>
+  <button data-p="inv">🏗️ Inversiones</button>
+  <button data-p="xm">⚡ XM / Red</button>
+</nav>
+
+<section id="gui" class="wrap">
+  <nav class="sub">
+    <button class="on">⚙️ Escenario y épocas</button>
+    <button>📊 Resumen</button>
+    <button>📈 Demanda épocas</button>
+    <button>⚡ Generación épocas</button>
+    <button>⚡ Motor B (en construcción)</button>
+  </nav>
+  <p>Interfaz al estilo <b>PyPSA-CL</b> para un comité UPME: mundos (escenarios) y tramos (épocas).</p>
+  <div class="box">
+    <b>Escenario</b> = un futuro (C1 Niño, C2 BAU, U3 favorable…).<br>
+    <b>Época</b> = un tramo de años dentro de ese futuro.<br>
+    <b>Cola + Resolver</b> = HiGHS en local con <code>streamlit run app.py</code>. Aquí puede probar <b>Inversiones</b> (sí corre HiGHS).
+  </div>
+  <div class="date"><b>Motor B.</b> Expansión/operación eléctrica con PyPSA. No sustituye LEAP, SDDP, N-1 AC ni ENFICC.</div>
+  <div class="cols">
+    <div>
+      <h3>Épocas</h3>
+      <label>Nombre</label><input value="first epoch" readonly/>
+      <label>Start date</label><input value="2026-01-01" readonly/>
+      <label>Representative days</label><select><option>7 = lun–dom (tipo XM)</option></select>
+      <label>Red</label><select><option>18 subáreas operativas</option><option>El Modelo STN</option><option>7 nodos</option></select>
+    </div>
+    <div>
+      <h3>Escenario</h3>
+      <label>Global scenario</label>
+      <select><option>C1 - Conservador (Niño / desfavorable)</option><option>C2 - BAU</option><option>U3 - UPME favorable</option></select>
+      <label>Demanda</label><input value="Baja - C1 · ~2%/año desde 2026" readonly/>
+      <label>Hidrología</label><input value="Seca (Niño XM)" readonly/>
+      <p class="cap"><code>p_nom</code> no crece sola; la demanda sí. Despacho solo tras HiGHS.</p>
+    </div>
+    <div>
+      <h3>SIN Colombia</h3>
+      <div class="sin"></div>
+      <p class="cap">naranja = demanda · verde = generación. Mapas de inversión: pestaña Inversiones, <b>después</b> de Comparar.</p>
+    </div>
+  </div>
+</section>
+
+<section id="inv" class="wrap hidden">
+  <div class="date"><b>Mapas de Colombia:</b> no aparecen hasta que marque inversiones y pulse <b>Comparar</b>. Entonces verá antes / después y el Δ de despacho en las subáreas donde puso MW.</div>
+  <p>Ubique eólica, solar, BESS o un refuerzo. HiGHS compara el caso base contra ese portafolio (1 día representativo en esta vista).</p>
+  <label>Red</label>
+  <select id="net">
+    <option value="clustered-18">18 subáreas operativas</option>
+    <option value="dashboard-sin">Modelo pequeño 7 nodos</option>
+  </select>
+  <h3>1. Elija inversiones</h3>
+  <table id="tbl">
+    <tr><th></th><th>Tipo</th><th>Zona</th><th>Destino</th><th>MW</th></tr>
+    <tr><td><input type="checkbox" class="use" checked></td><td>Eólica</td><td>Guajira</td><td></td><td>500</td></tr>
+    <tr><td><input type="checkbox" class="use" checked></td><td>Refuerzo de red</td><td>Guajira</td><td>Cesar</td><td>800</td></tr>
+    <tr><td><input type="checkbox" class="use"></td><td>Solar</td><td>Cesar</td><td></td><td>400</td></tr>
+    <tr><td><input type="checkbox" class="use"></td><td>BESS 4 h</td><td>Bogotá</td><td></td><td>200</td></tr>
+    <tr><td><input type="checkbox" class="use"></td><td>Solar</td><td>Santander</td><td></td><td>300</td></tr>
+  </table>
+  <button class="btn" id="go">Comparar operación base vs este portafolio (HiGHS)</button>
+  <div id="status"></div>
+  <div id="kpis"></div>
+  <div id="maps" class="hidden">
+    <h3>Mapas de Colombia — efecto de las inversiones elegidas</h3>
+    <p class="cap">Izquierda = base. Derecha = con el portafolio. Marcadores = MW nuevos. Rojo = refuerzo. Δ verde/rojo = más/menos despacho.</p>
+    <img id="ba" class="map" alt="antes después"/>
+    <div class="grid2">
+      <img id="m0" class="map" alt="base"/>
+      <img id="m1" class="map" alt="inversiones"/>
+    </div>
+    <img id="md" class="map" alt="delta"/>
+    <img id="mf" class="map" alt="flujos"/>
+  </div>
+</section>
+
+<section id="xm" class="wrap hidden">
+  <div class="date">XM Generación / Demanda / Explorador = <b>último mes cerrado D-1</b>, no las épocas de la GUI. En local, pestañas Streamlit leen SINERGOX o el extracto empaquetado.</div>
+  <div class="box">Red SIN: El Modelo STN · 18 subáreas · 7 nodos · fondo Grid2Poster OSM (ODbL).</div>
+</section>
+
+<script>
+document.getElementById('mainnav').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#mainnav button').forEach(x => x.classList.toggle('on', x===b));
+  ['gui','inv','xm'].forEach(id => document.getElementById(id).classList.toggle('hidden', id !== b.dataset.p));
+};
+document.getElementById('go').onclick = async () => {
+  const rows = [...document.querySelectorAll('#tbl tr')].slice(1).filter(r => r.querySelector('.use').checked).map(r => {
+    const t = r.querySelectorAll('td');
+    return {tipo: t[1].textContent.trim(), zona: t[2].textContent.trim(), zona_destino: t[3].textContent.trim(), MW: parseFloat(t[4].textContent)};
+  });
+  const st = document.getElementById('status');
+  const btn = document.getElementById('go');
+  if (!rows.length) { st.innerHTML = '<span class="err">Marque al menos una inversión.</span>'; return; }
+  btn.disabled = true;
+  st.textContent = 'HiGHS · base vs portafolio (unos segundos)…';
+  document.getElementById('maps').classList.add('hidden');
+  try {
+    const res = await fetch('/api/invest', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({network: document.getElementById('net').value, items: rows})});
+    const data = await res.json();
+    if (!res.ok) { st.innerHTML = '<span class="err">'+(data.error||res.status)+'</span>'; return; }
+    st.innerHTML = '<span class="ok">Listo · '+data.base_status+' / '+data.inv_status+'</span>';
+    document.getElementById('kpis').innerHTML = '<table><tr><th></th><th>base</th><th>con inversión</th></tr>'+
+      Object.entries(data.table||{}).map(([k,v])=>'<tr><td>'+k+'</td><td>'+v.base+'</td><td>'+v.inv+'</td></tr>').join('')+'</table>';
+    if (data.maps) {
+      const q = Date.now();
+      const set = (id,key) => { const el=document.getElementById(id); if(data.maps[key]){ el.src='/maps/'+data.maps[key]+'?t='+q; el.style.display='block'; } else el.style.display='none'; };
+      set('ba','map_before_after.png'); set('m0','map_base_generacion.png'); set('m1','map_inv_generacion.png');
+      set('md','map_delta_generacion.png'); set('mf','map_inv_flujos.png');
+      document.getElementById('maps').classList.remove('hidden');
+    }
+  } catch (e) {
+    st.innerHTML = '<span class="err">'+e+'</span>';
+  } finally { btn.disabled = false; }
+};
+</script>
+</body>
+</html>

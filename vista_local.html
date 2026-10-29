@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PyPSA-col — vista como en local (localhost:8501)</title>
+<style>
+  body { margin: 0; font-family: "Source Sans 3", Segoe UI, sans-serif; background: #f4f1ea; color: #1b2a41; }
+  header { display: flex; gap: 18px; align-items: center; padding: 16px 22px 8px; border-bottom: 1px solid #e2d9c8; background: #fff; }
+  .logo { width: 72px; height: 72px; border-radius: 10px; background: linear-gradient(#FCD116 0 33%, #003893 33% 66%, #CE1126 66% 100%); }
+  h1 { margin: 0; font-size: 1.55rem; }
+  .cap { color: #3d4f63; font-size: 0.92rem; margin-top: 4px; max-width: 920px; line-height: 1.4; }
+  nav.main { display: flex; gap: 6px; padding: 10px 18px 0; overflow-x: auto; background: #fff; border-bottom: 1px solid #e2d9c8; }
+  nav.main button, nav.sub button {
+    border: 0; background: transparent; padding: 10px 12px; cursor: pointer;
+    color: #3d4f63; font-weight: 600; border-bottom: 3px solid transparent; white-space: nowrap;
+  }
+  nav.main button.on, nav.sub button.on { color: #1b2a41; border-bottom-color: #b85716; }
+  .wrap { padding: 16px 22px 40px; }
+  .box { background: #fff; border: 1px solid #d9d2c5; border-left: 5px solid #b85716; padding: 12px 14px; margin: 10px 0 16px; line-height: 1.5; }
+  .date { background: #fff8e8; border: 1px solid #e0c48a; border-left: 5px solid #b85716; padding: 10px 14px; margin-bottom: 14px; }
+  .cols { display: grid; grid-template-columns: 1.05fr 1.15fr 0.95fr; gap: 16px; }
+  @media (max-width: 980px) { .cols { grid-template-columns: 1fr; } }
+  h3 { margin: 0 0 10px; }
+  label { display: block; font-weight: 700; font-size: 0.82rem; margin: 10px 0 4px; }
+  input, select { width: 100%; padding: 8px; border: 1px solid #cfc6b6; border-radius: 6px; background: #fff; }
+  .btn { background: #b85716; color: #fff; border: 0; padding: 10px 14px; border-radius: 8px; font-weight: 700; margin-top: 10px; }
+  .btn2 { background: #fff; color: #1b2a41; border: 1px solid #cfc6b6; padding: 10px 14px; border-radius: 8px; font-weight: 600; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; background: #fff; }
+  th, td { border: 1px solid #e2d9c8; padding: 6px 8px; text-align: left; }
+  .map { height: 220px; border: 1px solid #d9d2c5; border-radius: 8px; background:
+    radial-gradient(circle at 40% 45%, #2a9d8f 0 8px, transparent 9px),
+    radial-gradient(circle at 55% 58%, #f4a261 0 10px, transparent 11px),
+    linear-gradient(#dce8f5, #c5d6c0); }
+  .warn { background: #fff3cd; border: 1px solid #e0c48a; padding: 10px 14px; margin: 12px 22px; border-radius: 8px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="warn">
+  <b>Esto es una maqueta visual</b> de lo que vería en <code>http://localhost:8501</code>.
+  Streamlit real necesita WebSocket; en este iframe a veces sale “error de conexión”.
+  En su PC: <code>PYTHONPATH=src streamlit run app.py</code>.
+</div>
+<header>
+  <div class="logo" title="bandera"></div>
+  <div>
+    <h1>PyPSA-col — Long-term Power Systems Planning in Colombia</h1>
+    <div class="cap">SIN · XM DemaReal / CEN · malla OSM · HiGHS · GUI fiel a PyPSA-CL · esta app <b>sí corre el solver</b>. Hojas XM: último mes cerrado D-1. Tres modelos: El Modelo STN, 18 subáreas, 7 nodos. Red SIN: Grid2Poster OSM.</div>
+  </div>
+</header>
+<nav class="main" id="mainnav">
+  <button class="on" data-p="gui">🎛️ GUI (PyPSA-COL)</button>
+  <button data-p="inv">🏗️ Inversiones</button>
+  <button data-p="gen">⚡ Generación (último mes)</button>
+  <button data-p="dem">📈 Demanda (último mes)</button>
+  <button data-p="exp">🏭 Explorador de planta</button>
+  <button data-p="red">🔌 Red SIN</button>
+  <button data-p="res">📂 Resultados HiGHS</button>
+  <button data-p="man">📖 Manual de usuario</button>
+  <button data-p="met">ℹ️ Método</button>
+</nav>
+
+<section id="gui" class="wrap">
+  <nav class="sub" id="subnav">
+    <button class="on">⚙️ Escenario y épocas</button>
+    <button>📊 Resumen de escenarios</button>
+    <button>📈 Demanda de las épocas</button>
+    <button>⚡ Generación de las épocas</button>
+    <button>⚡ Motor B (B1–B14)</button>
+  </nav>
+  <p>Interfaz al estilo <b>PyPSA-CL</b>, pensada para un comité UPME: compare mundos (escenarios) y tramos de horizonte (épocas).</p>
+  <div class="box">
+    <b>Escenario</b> = un futuro (C1 Niño, C2 BAU, U3 favorable…). Puede tener <b>varias épocas</b>.<br>
+    <b>Época</b> = un tramo de años <i>dentro</i> de ese futuro.<br>
+    <b>Cola</b> = varios escenarios. <b>Run all</b> resuelve todos (HiGHS).
+  </div>
+  <div class="date"><b>Alcance ahora (UPME Abierta · Motor B).</b> Núcleo de expansión/operación eléctrica con PyPSA + HiGHS. No sustituye LEAP, SDDP, N-1 ni ENFICC.</div>
+  <div class="cols">
+    <div>
+      <h3>Épocas (tramos del horizonte)</h3>
+      <label>Nombre de la época</label>
+      <input value="first epoch" />
+      <label>Start date</label>
+      <input value="2026-01-01" />
+      <label>Representative years</label>
+      <select><option>2</option><option>5</option></select>
+      <label>Representative days</label>
+      <select><option>7 = lun–dom</option></select>
+      <label>Red Colombia</label>
+      <select><option>18 subáreas operativas · enlaces N-1</option><option>El Modelo STN</option><option>Modelo pequeño 7 nodos</option></select>
+      <button class="btn">Añadir época a este escenario</button>
+      <button class="btn2">Remove Selected</button>
+    </div>
+    <div>
+      <h3>Escenario (el futuro / el mundo)</h3>
+      <label>Global scenario</label>
+      <select><option>C1 - Conservador (Niño / desfavorable)</option><option>C2 - BAU</option><option>U3 - UPME favorable</option></select>
+      <label>Demand scenario</label><input value="Baja - C1" disabled />
+      <label>Hydrology scenario</label><input value="Seca (Niño XM)" disabled />
+      <h3>Cola de escenarios</h3>
+      <table>
+        <tr><th>i</th><th>global_scenario</th><th>epochs</th></tr>
+        <tr><td>1</td><td>C1 - Conservador…</td><td>2</td></tr>
+      </table>
+      <button class="btn">Resolver todos los escenarios de la cola (HiGHS)</button>
+    </div>
+    <div>
+      <h3>SIN Colombia</h3>
+      <div class="map"></div>
+      <p class="cap">naranja = demanda · verde = generación · 500 kV / 220-230. Tres modelos: STN, 18 subáreas, 7 nodos.</p>
+      <details>
+        <summary><b>CONFIGURACIONES ADICIONALES</b></summary>
+        <p>Restricciones, solver HiGHS, threads, MIP gap, modo de ejecución.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section id="inv" class="wrap hidden">
+  <h3>🏗️ Inversiones</h3>
+  <p>Ubique eólica, solar, BESS o refuerzo de red en subáreas. HiGHS compara base vs portafolio. Mapas de Colombia en un expander.</p>
+</section>
+<section id="gen" class="wrap hidden">
+  <h3>⚡ Generación XM — último mes cerrado (D-1)</h3>
+  <div class="date">No es el despacho de las épocas de la GUI; es el mix observado XM.</div>
+</section>
+<section id="dem" class="wrap hidden">
+  <h3>📈 Demanda XM — último mes cerrado</h3>
+  <div class="date">DemaReal nacional, ventana D-1 de 30 días. Benchmark de forma horaria para las épocas PyPSA.</div>
+</section>
+<section id="exp" class="wrap hidden"><h3>🏭 Explorador de planta</h3><p>Catálogo XM, CEN, CF, serie de la planta.</p></section>
+<section id="red" class="wrap hidden"><h3>🔌 Red SIN</h3><p>STN 144 barras · 18 subáreas · 7 nodos · Grid2Poster OSM.</p></section>
+<section id="res" class="wrap hidden"><h3>📂 Resultados HiGHS</h3><p>Carpetas <code>outputs/sXX_eYY</code> tras Resolver.</p></section>
+<section id="man" class="wrap hidden"><h3>📖 Manual</h3></section>
+<section id="met" class="wrap hidden"><h3>ℹ️ Método</h3></section>
+
+<script>
+  const pages = ['gui','inv','gen','dem','exp','red','res','man','met'];
+  document.getElementById('mainnav').onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#mainnav button').forEach(x => x.classList.toggle('on', x===b));
+    pages.forEach(id => document.getElementById(id).classList.toggle('hidden', id !== b.dataset.p));
+  };
+</script>
+</body>
+</html>

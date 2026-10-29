@@ -1,0 +1,32 @@
+.venv/
+site/
+.streamlit/secrets.toml
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.snakemake/
+.cache/
+.ipynb_checkpoints/
+.cdsapirc
+.env
+build/
+dist/
+cutouts/*.nc
+resources/
+results/
+outputs/
+data/raw/
+data/processed/
+data/user/*
+!data/user/README.md
+!data/user/*.example.csv
+external/*/.git/
+*.log
+
+# Fetched dependency (included in delivery ZIP, bootstrapped in a Git checkout)
+external/colombiacongestionV2/
+
+# Generated local release integrity manifest
+RELEASE_MANIFEST.json
