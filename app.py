@@ -31,6 +31,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from pypsa_col.charts import plot_series
+from pypsa_col.st_compat import on_streamlit_cloud, stretch
 from pypsa_col.gui_core import (
     ALL_GLOBAL_NAMES,
     BASE_COLORS,
@@ -143,9 +144,11 @@ def _init_state() -> None:
     ss.setdefault("global_scenario", PRESET_NAMES[0])
     ss.setdefault("custom_name", "")
     ss.setdefault("start_date", date(2026, 1, 1))
-    ss.setdefault("rep_years", 2)
-    ss.setdefault("rep_months", 6)
+    cloud = on_streamlit_cloud()
+    ss.setdefault("rep_years", 1 if cloud else 2)
+    ss.setdefault("rep_months", 1 if cloud else 6)
     ss.setdefault("rep_days", 7)
+    ss.setdefault("solver_threads", 1 if cloud else min(2, os.cpu_count() or 2))
     ss.setdefault("epoch_name", epoch_name_for(0))
     ss.setdefault("last_outdir", None)
     ss.setdefault("last_error", None)
@@ -158,7 +161,6 @@ def _init_state() -> None:
     ss.setdefault("fnce_pct", 20.0)
     ss.setdefault("cb_coal", False)
     ss.setdefault("solver_name", "highs")
-    ss.setdefault("solver_threads", min(2, os.cpu_count() or 2))
     ss.setdefault("mip_gap", 0.1)
     ss.setdefault("lin_uc", True)
     ss.setdefault("exec_mode", "Secuencial")
@@ -250,9 +252,6 @@ def _add_epoch() -> None:
     st.session_state.locked = True
     nxt = datetime.strptime(end_s, "%Y-%m-%d").date() + timedelta(days=1)
     st.session_state.start_date = nxt
-    st.session_state.rep_years = 5
-    st.session_state.rep_months = 6
-    st.session_state.rep_days = 7
     st.session_state.epoch_name = epoch_name_for(len(epochs))
     st.session_state.last_error = None
 
@@ -374,7 +373,7 @@ def _colombia_maps() -> None:
     ):
         p = fig / name
         if p.exists():
-            st.image(str(p), caption=cap, use_container_width=True)
+            st.image(str(p), caption=cap, **stretch())
             shown += 1
     if not shown:
         st.info("No hay PNG de mapas empaquetados en data/streamlit/figures.")
@@ -395,7 +394,7 @@ def _figure_dir() -> Path | None:
 
 def _show_png(path: Path, caption: str) -> None:
     if path.exists():
-        st.image(str(path), caption=caption, use_container_width=True)
+        st.image(str(path), caption=caption, **stretch())
     else:
         st.info(f"Aún no hay {path.name}. Corra un escenario en la GUI.")
 
@@ -495,7 +494,7 @@ introdujo PyPSA-CL para expansión eléctrica. Aquí hacemos lo mismo: un modelo
                     ]
                 ),
                 hide_index=True,
-                use_container_width=True,
+                **stretch(),
             )
             st.selectbox(
                 "Época seleccionada",
@@ -558,7 +557,7 @@ introdujo PyPSA-CL para expansión eléctrica. Aquí hacemos lo mismo: un modelo
                     ]
                 ),
                 hide_index=True,
-                use_container_width=True,
+                **stretch(),
             )
             st.selectbox(
                 "Escenario seleccionado",
@@ -787,7 +786,7 @@ def _tab_gui_epoch_demand() -> None:
                 "fin": ep.get("end_date"),
             }
         )
-    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(rows), hide_index=True, **stretch())
     st.markdown(
         """
 <div class="date-box">
@@ -880,7 +879,7 @@ PyPSA-CL (años / meses / días representativos).
             "En *Escenario y épocas* elija Representative days = 7. "
             "No es el último mes XM (esa pestaña es el observado)."
         )
-        st.dataframe(daily.round(1), use_container_width=True)
+        st.dataframe(daily.round(1), **stretch())
     if series:
         chart = pd.DataFrame(series)
         st.subheader("Serie representativa completa (meses × tipos de día × 24 h)")
@@ -972,7 +971,7 @@ y puede subir porque la demanda subió (más térmica), no porque se hayan añad
         st.warning(f"No se pudo previsualizar generación: {exc}")
         return
     if frames:
-        st.dataframe(pd.concat(frames, ignore_index=True), hide_index=True, use_container_width=True)
+        st.dataframe(pd.concat(frames, ignore_index=True), hide_index=True, **stretch())
     if avail:
         st.subheader("Potencia disponible total (MW) — una curva por escenario × época")
         adf = pd.DataFrame(avail)
@@ -1012,7 +1011,7 @@ y puede subir porque la demanda subió (más térmica), no porque se hayan añad
                 shown_dispatch = True
             atlas = epd / "atlas_4panel.png"
             if atlas.exists():
-                st.image(str(atlas), caption=f"Mapa Colombia · {epd.name}", use_container_width=True)
+                st.image(str(atlas), caption=f"Mapa Colombia · {epd.name}", **stretch())
     if not shown_dispatch:
         st.info(
             "Todavía no hay `generation_by_carrier.csv`. En *Escenario y épocas* pulse "
@@ -1020,7 +1019,7 @@ y puede subir porque la demanda subió (más térmica), no porque se hayan añad
         )
         bundled = ROOT / "data" / "streamlit" / "figures" / "dispatch.png"
         if bundled.exists():
-            st.image(str(bundled), caption="Ejemplo empaquetado (no es su corrida)", use_container_width=True)
+            st.image(str(bundled), caption="Ejemplo empaquetado (no es su corrida)", **stretch())
         _colombia_maps()
 
 
@@ -1039,7 +1038,7 @@ def _tab_gui_figures() -> None:
             st.info("Corra uno o más escenarios (cola → Resolver). Aquí aparecerán mapas **por escenario**.")
             bundled = ROOT / "data" / "streamlit" / "figures" / "atlas_4panel.png"
             if bundled.exists():
-                st.image(str(bundled), caption="Atlas ilustrativo (aún no es su corrida)", use_container_width=True)
+                st.image(str(bundled), caption="Atlas ilustrativo (aún no es su corrida)", **stretch())
             return
         folders = [figdir]
     by_sc: dict[str, list] = {}
@@ -1061,7 +1060,7 @@ def _tab_gui_figures() -> None:
             with st.expander(title, expanded=len(items) == 1 and len(by_sc) == 1):
                 board = epd / "atlas_4panel.png"
                 if board.exists():
-                    st.image(str(board), caption="Atlas 4 capas", use_container_width=True)
+                    st.image(str(board), caption="Atlas 4 capas", **stretch())
                 layer_opts = [
                     ("atlas_demanda.png", "Demanda"),
                     ("atlas_generacion.png", "Generación"),
@@ -1079,7 +1078,7 @@ def _tab_gui_figures() -> None:
                         format_func=lambda f: dict(available)[f],
                         key=f"fig-layer-{epd.name}",
                     )
-                    st.image(str(epd / pick), use_container_width=True)
+                    st.image(str(epd / pick), **stretch())
                 _show_html(epd / "explore_load.html")
                 _show_html(epd / "explore_flow.html")
 
@@ -1168,7 +1167,7 @@ def _tab_gui_scenario_summary() -> None:
 
     if rows:
         view = pd.DataFrame(rows)
-        st.dataframe(view, hide_index=True, use_container_width=True)
+        st.dataframe(view, hide_index=True, **stretch())
         chart_src = view.dropna(subset=["GWh_año"]) if "GWh_año" in view.columns else pd.DataFrame()
         if not chart_src.empty:
             lab = chart_src["escenario"].astype(str) + " · " + chart_src["época"].astype(str)
@@ -1253,7 +1252,7 @@ def _tab_gui_scenario_summary() -> None:
                     st.image(
                         str(board),
                         caption="Atlas 4 capas (demanda / generación / LMP / flujos)",
-                        use_container_width=True,
+                        **stretch(),
                     )
                 else:
                     st.caption("Sin atlas_4panel.png en esta época.")
@@ -1281,14 +1280,14 @@ def _tab_gui_scenario_summary() -> None:
                         st.image(
                             str(big),
                             caption=layer.replace("atlas_", "").replace(".png", ""),
-                            use_container_width=True,
+                            **stretch(),
                         )
                 legacy = epd / "colombia_map.png"
                 if legacy.exists() and not board.exists():
-                    st.image(str(legacy), caption="Mapa de red (legado)", use_container_width=True)
+                    st.image(str(legacy), caption="Mapa de red (legado)", **stretch())
                 lmp = epd / "lmp.png"
                 if lmp.exists() and not (epd / "atlas_lmp.png").exists():
-                    st.image(str(lmp), caption="LMP legado", use_container_width=True)
+                    st.image(str(lmp), caption="LMP legado", **stretch())
 
 
 def _tab_gui_motor_b() -> None:
@@ -1372,7 +1371,7 @@ def tab_inversiones() -> None:
     edited = st.data_editor(
         st.session_state.inv_editor,
         num_rows="dynamic",
-        use_container_width=True,
+        **stretch(),
         column_config={
             "tipo": st.column_config.SelectboxColumn("Tipo", options=list(INV_TYPES), required=True),
             "zona": st.column_config.SelectboxColumn("Zona / subárea", options=zones, required=True),
@@ -1397,7 +1396,7 @@ def tab_inversiones() -> None:
                 [{"inversión": v["label"], "capex_MUSD": v["capex_musd"], "nota": v["note"]} for v in PACKAGES.values()]
             ),
             hide_index=True,
-            use_container_width=True,
+            **stretch(),
         )
     picked = st.session_state.get("inv_pack") or []
 
@@ -1495,7 +1494,7 @@ def tab_inversiones() -> None:
         ],
     )
     cmp_tbl["delta"] = cmp_tbl["con_inversion"] - cmp_tbl["base"]
-    st.dataframe(cmp_tbl.round(2), use_container_width=True)
+    st.dataframe(cmp_tbl.round(2), **stretch())
     mix = result["mix_mwh"].copy()
     mix.index = [NICE_NAME.get(i, i) for i in mix.index]
     dem = float(k1.get("demand_mwh") or 0) or 1.0
@@ -1503,7 +1502,7 @@ def tab_inversiones() -> None:
     mix["inv_%dem"] = 100.0 * mix["con_inversion"] / dem
     st.subheader("Energía por tecnología (MWh ponderados del año representativo)")
     plot_series(mix[["base", "con_inversion"]], kind="bar", y_title="MWh ponderados")
-    st.dataframe(mix.round(1), use_container_width=True)
+    st.dataframe(mix.round(1), **stretch())
     st.caption(
         "MWh = Σ P × snapshot_weightings. Un Δ negativo en carbón/gas y positivo en solar/eólica "
         "es el desplazamiento que busca FNCER. Si la demanda no cambia, el paquete no altera la carga, "
@@ -1518,7 +1517,7 @@ def tab_inversiones() -> None:
             ]
         ),
         hide_index=True,
-        use_container_width=True,
+        **stretch(),
     )
     st.subheader("Mapas de Colombia — modificaciones de este portafolio")
     st.caption(
@@ -1532,20 +1531,20 @@ def tab_inversiones() -> None:
     else:
         ba = maps.get("map_before_after.png")
         if ba and Path(ba).exists():
-            st.image(ba, caption="Antes | Después (mismas escalas geográficas)", use_container_width=True)
+            st.image(ba, caption="Antes | Después (mismas escalas geográficas)", **stretch())
         cols_m = st.columns(2)
         left = maps.get("map_base_generacion.png")
         right = maps.get("map_inv_generacion.png")
         if left and Path(left).exists():
-            cols_m[0].image(left, caption="Base", use_container_width=True)
+            cols_m[0].image(left, caption="Base", **stretch())
         if right and Path(right).exists():
-            cols_m[1].image(right, caption="Con inversiones", use_container_width=True)
+            cols_m[1].image(right, caption="Con inversiones", **stretch())
         dlt = maps.get("map_delta_generacion.png")
         flw = maps.get("map_inv_flujos.png")
         if dlt and Path(dlt).exists():
-            st.image(dlt, caption="Δ generación por subárea (verde más despacho, rojo menos)", use_container_width=True)
+            st.image(dlt, caption="Δ generación por subárea (verde más despacho, rojo menos)", **stretch())
         if flw and Path(flw).exists():
-            st.image(flw, caption="Carga de corredores con el portafolio (rojo = refuerzo elegido)", use_container_width=True)
+            st.image(flw, caption="Carga de corredores con el portafolio (rojo = refuerzo elegido)", **stretch())
         if result.get("map_dir"):
             st.caption(f"Archivos: `{result['map_dir']}`")
     with st.expander("Límites de esta lectura (Motor B)"):
@@ -1797,7 +1796,7 @@ def tab_generacion() -> None:
     show_cols = [c for c in ["Nombre_Planta", "zona", "carrier", "cen_mw", "gene_mwh", "cf"] if c in view.columns]
     if not show_cols:
         show_cols = list(view.columns)[:8]
-    st.dataframe(view[show_cols], use_container_width=True, hide_index=True)
+    st.dataframe(view[show_cols], **stretch(), hide_index=True)
 
 
 def tab_demanda() -> None:
@@ -1826,7 +1825,7 @@ def tab_demanda() -> None:
     plot_series(pd.Series(PESO_DEMANDA, name="peso"), kind="bar", y_title="Peso")
     tot = dem.sum().sum() / 1000.0
     _kpi_table([("Energía ventana (último mes XM)", f"{tot:,.2f} GWh")])
-    st.dataframe(dem, use_container_width=True)
+    st.dataframe(dem, **stretch())
 
 
 def tab_explorador() -> None:
@@ -1880,7 +1879,7 @@ def tab_red() -> None:
         st.image(
             str(board),
             caption="Atlas 18 subáreas · fondo Grid2Poster OSM · naranja demanda / verde generación / LMP / carga de corredores.",
-            use_container_width=True,
+            **stretch(),
         )
     catalog = ROOT / "data" / "streamlit" / "networks" / "three_models.json"
     if catalog.exists():
@@ -1914,7 +1913,7 @@ def tab_red() -> None:
         if {"x", "y"}.issubset(bdf.columns):
             show = bdf.rename(columns={"y": "lat", "x": "lon"})
             cols = [c for c in ("name", "station", "subarea", "v_nom", "lat", "lon") if c in show.columns]
-            st.dataframe(show[cols] if cols else show.head(), hide_index=True, use_container_width=True)
+            st.dataframe(show[cols] if cols else show.head(), hide_index=True, **stretch())
             st.map(show.dropna(subset=["lat", "lon"]), latitude="lat", longitude="lon", size=40)
     st.divider()
     st.markdown("**Grid2Poster** (OSM Colombia, adaptación colombiacongestionV2).")
@@ -1925,7 +1924,7 @@ def tab_red() -> None:
         st.image(
             str(shown),
             caption="Grid2Poster · Colombia · tema electric_midnight · geometría OSM (ODbL) · no es un diagrama unifilar oficial.",
-            use_container_width=True,
+            **stretch(),
         )
     else:
         st.info("No hay PNG de Grid2Poster. Pulse renderizar si el source está clonado.")
@@ -1952,9 +1951,9 @@ def tab_red() -> None:
         [{"zona": k, "label": v["label"], "lon": v["x"], "lat": v["y"]} for k, v in ZONAS.items()]
     )
     st.subheader("7 subregiones dashboard-SIN (declaradas, no oficiales)")
-    st.dataframe(z, hide_index=True, use_container_width=True)
+    st.dataframe(z, hide_index=True, **stretch())
     r = pd.DataFrame(RAMAS, columns=["from", "to", "NTC_MW", "nombre"])
-    st.dataframe(r, hide_index=True, use_container_width=True)
+    st.dataframe(r, hide_index=True, **stretch())
     st.map(z.rename(columns={"lat": "lat", "lon": "lon"}), latitude="lat", longitude="lon", size=200)
     st.caption("Advertencia: subregiones y NTC son supuestos del tablero, no un registro PARATEC/UPME.")
     m = ROOT / "data" / "streamlit" / "figures" / "sin_network.png"
@@ -1976,7 +1975,7 @@ def tab_resultados() -> None:
     st.code(str(p))
     costs = p / "system_costs.csv"
     if costs.exists():
-        st.dataframe(pd.read_csv(costs), use_container_width=True)
+        st.dataframe(pd.read_csv(costs), **stretch())
     for ep in sorted(p.glob("s*_e*")):
         st.subheader(ep.name)
         for csv in [
@@ -1989,7 +1988,7 @@ def tab_resultados() -> None:
             f = ep / csv
             if f.exists():
                 with st.expander(csv):
-                    st.dataframe(pd.read_csv(f), use_container_width=True)
+                    st.dataframe(pd.read_csv(f), **stretch())
         gen = ep / "generation_results.csv"
         if gen.exists():
             st.download_button(
@@ -2045,7 +2044,7 @@ snakemake -s workflow/Snakefile.osm.smk --cores 2
             if k in STACK_ORDER
         ]
     )
-    st.dataframe(palette, hide_index=True, use_container_width=True)
+    st.dataframe(palette, hide_index=True, **stretch())
     st.color_picker("Workshop Gas (hex)", to_hex(WORKSHOP_COLORS["Gas"]), disabled=True)
 
 
@@ -2057,7 +2056,7 @@ def main() -> None:
     cols = st.columns([1, 4])
     with cols[0]:
         if logo.exists():
-            st.image(str(logo), use_container_width=True)
+            st.image(str(logo), **stretch())
     with cols[1]:
         st.title("PyPSA-col — Long-term Power Systems Planning in Colombia")
         st.caption(
@@ -2065,6 +2064,15 @@ def main() -> None:
             "esta app **sí corre el solver** (no es el sitio estático de Netlify).  "
             "Hojas XM (Generación, Demanda, Explorador): **último mes cerrado D-1** "
             "(como dashboard-sin-nodal). Tres modelos: El Modelo STN, 18 subáreas, 7 nodos. Red SIN: Grid2Poster OSM."
+        )
+
+    if on_streamlit_cloud():
+        st.info(
+            "Streamlit Community Cloud tiene ~1 GB de RAM. "
+            "En **El Modelo STN** use 1 año × 1 mes × 7 días (o 24 h). "
+            "2 épocas × 5 años × 6 meses × 7 días genera un LP de ~1 millón de filas: "
+            "el primer HiGHS puede terminar y el segundo tumba el contenedor. "
+            "Para estudios grandes: red de **18 subáreas** o **7 nodos**, o corra en su PC."
         )
 
     t_gui, t_inv, t_gen, t_dem, t_exp, t_red, t_res, t_man, t_doc = st.tabs(

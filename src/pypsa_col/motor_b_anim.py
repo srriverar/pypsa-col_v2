@@ -12,6 +12,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from pypsa_col.plotting import NICE_NAME
+from pypsa_col.st_compat import stretch
 from pypsa_col.mde.animations import TAG_CMP, TAG_DATOS, TAG_ILUST, inject
 
 # Prefix for Streamlit widget keys — Streamlit runs every tab body, so keys
@@ -197,17 +198,17 @@ def b2_red(c: dict) -> None:
         mean_load = n.loads_t.p_set.mean()
         if "bus" in n.loads.columns:
             buses["demanda_media_MW"] = mean_load.groupby(n.loads.bus).sum()
-    st.dataframe(buses.reset_index().head(40), hide_index=True, use_container_width=True)
+    st.dataframe(buses.reset_index().head(40), hide_index=True, **stretch())
     if res.startswith("Esquema"):
         st.caption("🎨 Agregado pedagógico. Grosor ≠ flujo real.")
     if not n.lines.empty:
         L = n.lines[["bus0", "bus1", "s_nom"]].copy() if "s_nom" in n.lines.columns else n.lines[["bus0", "bus1"]].copy()
         st.markdown("Líneas: capacidad `s_nom`. Color de congestión solo si hay `lines_t.p0` post-HiGHS.")
-        st.dataframe(L.head(20), use_container_width=True)
+        st.dataframe(L.head(20), **stretch())
     if not n.links.empty:
         st.markdown("Enlaces 18-subáreas (transporte). Grosor = capacidad; color = utilización **si** hay flujo resuelto.")
         cols = [c for c in ("bus0", "bus1", "p_nom") if c in n.links.columns]
-        st.dataframe(n.links[cols].head(25), use_container_width=True)
+        st.dataframe(n.links[cols].head(25), **stretch())
         if hasattr(n, "links_t") and not n.links_t.p0.empty:
             util = n.links_t.p0.abs().mean() / n.links.p_nom.replace(0, pd.NA)
             st.bar_chart(util.dropna().head(18))
@@ -312,7 +313,7 @@ def b6_storage(c: dict) -> None:
         return
     su = n.storage_units[["p_nom", "max_hours"]].copy()
     su["MWh"] = su["p_nom"] * su["max_hours"]
-    st.dataframe(su, use_container_width=True)
+    st.dataframe(su, **stretch())
     st.caption("Opción línea vs batería vs ambas: solo tras Inversiones/HiGHS. Una batería no sustituye toda función de un corredor.")
 
 
@@ -361,7 +362,7 @@ def b8_expansion(cases: list[dict]) -> None:
         st.info("Añada épocas.")
         return
     df = pd.DataFrame(rows)
-    st.dataframe(df, hide_index=True, use_container_width=True)
+    st.dataframe(df, hide_index=True, **stretch())
     st.bar_chart(df.pivot_table(index="año", columns="tecnología", values="MW", aggfunc="sum").fillna(0))
     st.caption("Línea de tiempo por año de inicio de época. Existente = sólido. Inversiones (otra pestaña) = patrón candidato.")
 
@@ -408,7 +409,7 @@ def b11_costos(last_outdir) -> None:
     costs = root / "system_costs.csv"
     if costs.exists():
         df = pd.read_csv(costs)
-        st.dataframe(df, hide_index=True, use_container_width=True)
+        st.dataframe(df, hide_index=True, **stretch())
         if "objective_usd" in df.columns:
             st.bar_chart(df.set_index(df.get("epoch", df.index.astype(str)))["objective_usd"])
         _tag("datos", "última corrida", "—", "ud. del modelo, no COP de tarifa")
@@ -469,7 +470,7 @@ def b13_comparar(cases: list[dict]) -> None:
         st.info("Cola vacía.")
         return
     df = pd.DataFrame(rows)
-    st.dataframe(df.round(1), hide_index=True, use_container_width=True)
+    st.dataframe(df.round(1), hide_index=True, **stretch())
     st.bar_chart(df.set_index(df["escenario"] + " · " + df["época"])["demanda_MWh_pond"])
     if len(df) > 1:
         st.caption(

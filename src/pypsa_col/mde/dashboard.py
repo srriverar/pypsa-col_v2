@@ -16,6 +16,8 @@ from .methods import useful_to_final
 from .package import inventory
 from .policies import DEFAULT_POLICIES
 from .profiles import pypsa_contract, weekday_hour_weights
+from pypsa_col.st_compat import stretch
+
 from .tree import as_frame
 
 
@@ -102,7 +104,7 @@ Cada animación lleva etiqueta <b>🎨 ilustrativa</b> (no es el modelo) o <b>�
         st.markdown("**A12 Calibración BECO.** Verde/ámbar/rojo son tolerancias *configurables*, no un estándar oficial.")
         rec = reconcile(run(RunConfig(scenario=sc))["consumo"], 2023)
         rec["semaforo"] = rec["delta_pct"].abs().map(lambda x: "verde" if x < 5 else ("ámbar" if x < 15 else "rojo") if pd.notna(x) else "—")
-        st.dataframe(rec.round(2), hide_index=True, use_container_width=True)
+        st.dataframe(rec.round(2), hide_index=True, **stretch())
         st.bar_chart(rec[rec.sector != "TOTAL"].set_index("sector")[["BECO_pj", "modelo_pj"]])
         st.caption(BECO_NOTE)
     with tabs[13]:
@@ -119,14 +121,14 @@ def _tab_paquete() -> None:
     st.dataframe(
         pd.DataFrame(inv)[["nombre", "modelo", "archivo", "integridad", "sha256"]],
         hide_index=True,
-        use_container_width=True,
+        **stretch(),
     )
     gold = compare_gold()
     st.markdown("**Controles del anexo (deben estar verdes)**")
-    st.dataframe(gold[["hoja", "celda", "energetico", "año", "esperado_anexo", "leido_csv", "ok"]], hide_index=True, use_container_width=True)
-    st.dataframe(matrix_frame(), hide_index=True, use_container_width=True)
+    st.dataframe(gold[["hoja", "celda", "energetico", "año", "esperado_anexo", "leido_csv", "ok"]], hide_index=True, **stretch())
+    st.dataframe(matrix_frame(), hide_index=True, **stretch())
     suite = function_suite()
-    st.dataframe(suite, hide_index=True, use_container_width=True)
+    st.dataframe(suite, hide_index=True, **stretch())
     st.success(f"{int(suite.ok.sum())}/{len(suite)} pruebas exactas.") if bool(suite.ok.all()) else st.error("Fallos en pruebas.")
     md = Path(__file__).resolve().parents[3] / "data" / "mde" / "INVENTARIO.md"
     if md.exists():
@@ -149,7 +151,7 @@ def _tab_a1(sc: str, year: int) -> None:
 def _tab_a2() -> None:
     st.subheader("¿De qué partes está compuesto el modelo?")
     st.caption("🎨 El árbol se expande in situ. Ruta tipo LEAP: Residencial > Rural > Cocción > Leña.")
-    st.dataframe(as_frame(), hide_index=True, use_container_width=True)
+    st.dataframe(as_frame(), hide_index=True, **stretch())
     metodo = st.radio("Viaje de un cálculo (la fórmula cambia según la rama)", ["Cocción (B)", "Stock vehículos (C)", "Intensidad (A)"], horizontal=True)
     kind = {"Cocción (B)": "coccion", "Stock vehículos (C)": "stock"}.get(metodo, "A")
     A.formula_viaje(kind)
@@ -205,7 +207,7 @@ def _tab_a9(sc: str) -> None:
         st.session_state["mde_a9"] = m.merge(national_by_year(alt["consumo"]).rename(columns={"pj": "con_medidas"}), on="year")
     if st.session_state.get("mde_a9") is not None:
         st.line_chart(st.session_state["mde_a9"].set_index("year"))
-        st.dataframe(st.session_state["mde_a9"].round(1), hide_index=True, use_container_width=True)
+        st.dataframe(st.session_state["mde_a9"].round(1), hide_index=True, **stretch())
 
 
 def _tab_a10(sc: str) -> None:

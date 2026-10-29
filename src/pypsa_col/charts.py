@@ -5,6 +5,8 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from pypsa_col.st_compat import stretch
+
 
 def plot_series(
     data: pd.DataFrame | pd.Series,
@@ -66,5 +68,5 @@ def plot_series(
         plot_bgcolor="#fffdf8",
         font=dict(color="#1b2a41"),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, **stretch())
     st.caption("Clic en un color de la leyenda para ocultar o volver a mostrar esa serie.")
