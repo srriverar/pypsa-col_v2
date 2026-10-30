@@ -938,7 +938,6 @@ y puede subir porque la demanda subió (más térmica), no porque se hayan añad
         st.info("Añada épocas y/o cierre escenarios en *Escenario y épocas*.")
         return
     frames = []
-    avail = {}
     last_by = None
     last_label = ""
     if not st.checkbox(
@@ -980,25 +979,13 @@ y puede subir porque la demanda subió (más térmica), no porque se hayan añad
                 mw = pu[cols].mul(pnom.reindex(cols), axis=1)
                 by = mw.T.groupby(gens.carrier).sum().T
                 by = by.rename(columns=lambda c: NICE_NAME.get(c, c))
-                avail[label] = by.sum(axis=1).reset_index(drop=True)
                 last_by = by
                 last_label = label
-            else:
-                avail[label] = pd.Series(float(gens.p_nom.sum()), index=range(len(n.snapshots)))
     except Exception as exc:  # noqa: BLE001
         st.warning(f"No se pudo previsualizar generación: {exc}")
         return
     if frames:
         st.dataframe(pd.concat(frames, ignore_index=True), hide_index=True, **stretch())
-    if avail:
-        st.subheader("Potencia disponible total (MW) — una curva por escenario × época")
-        adf = pd.DataFrame(avail)
-        plot_series(adf, kind="line", y_title="MW disponibles (p_nom × p_max_pu)", x_title="Snapshot")
-        st.caption(
-            "Suma de **capacidad disponible**, no el despacho. Hidro baja en Niño; solar de día; "
-            "térmica queda plana (p_max_pu≈1). Cada color = un escenario × época. "
-            "Clic en la leyenda para aislar una curva. El eje X recorre meses × lun–dom × 24 h."
-        )
     if last_by is not None and not last_by.empty:
         st.subheader(f"Disponibilidad por tecnología — {last_label}")
         plot = last_by.reset_index(drop=True)
@@ -1374,13 +1361,59 @@ def tab_inversiones() -> None:
         "**Los mapas de Colombia salen abajo, solo después de Comparar** — muestran el efecto "
         "de *estas* inversiones (no el atlas genérico)."
     )
-    from pypsa_col.investments import (
-        INV_TYPES,
-        MAX_CUSTOM_ITEMS,
-        PACKAGES,
-        ZONES_18,
-        compare_investments_multi,
-    )
+    import pypsa_col.investments as _inv
+
+    INV_TYPES = _inv.INV_TYPES
+    PACKAGES = _inv.PACKAGES
+    ZONES_18 = _inv.ZONES_18
+    MAX_CUSTOM_ITEMS = int(getattr(_inv, "MAX_CUSTOM_ITEMS", 40))
+    compare_investments_multi = getattr(_inv, "compare_investments_multi", None)
+    if compare_investments_multi is None:
+        _one = _inv.compare_investments
+
+        def compare_investments_multi(  # type: ignore[misc]
+            root,
+            selected,
+            *,
+            network_key="clustered-18",
+            cases=None,
+            solver="highs",
+            custom_items=None,
+        ):
+            cases = list(cases or [{}])
+            primary = None
+            rows = []
+            for i, ep in enumerate(cases):
+                r = _one(
+                    root,
+                    selected,
+                    network_key=network_key,
+                    levers=ep or None,
+                    solver=solver,
+                    custom_items=custom_items,
+                )
+                k0, k1 = r["kpis_base"], r["kpis_inv"]
+                rows.append(
+                    {
+                        "escenario": (ep or {}).get("global_scenario"),
+                        "época": (ep or {}).get("name"),
+                        "Δopex": r.get("opex_delta"),
+                        "ΔENS_MWh": r.get("shed_delta"),
+                        "ΔFNCE_GWh": (r.get("fnce_delta") or 0) / 1e3,
+                        "base_status": r.get("base_status"),
+                        "inv_status": r.get("inv_status"),
+                    }
+                )
+                if primary is None:
+                    primary = r
+            return {
+                "by_case": rows,
+                "primary": primary,
+                "n_cases": len(cases),
+                "network": network_key,
+                "applied": (primary or {}).get("applied") or [],
+                "capex_musd": (primary or {}).get("capex_musd") or 0.0,
+            }
 
     net = st.selectbox(
         "Red para el experimento",
