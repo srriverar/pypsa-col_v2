@@ -163,6 +163,7 @@ def _init_state() -> None:
     ss.setdefault("cb_fnce", False)
     ss.setdefault("fnce_pct", 20.0)
     ss.setdefault("cb_coal", False)
+    ss.setdefault("full_horizon", False)
     ss.setdefault("solver_name", "highs")
     ss.setdefault("mip_gap", 0.1)
     ss.setdefault("lin_uc", True)
@@ -214,6 +215,7 @@ def _settings_from_widgets() -> dict:
         "constraint_fnce": bool(st.session_state.cb_fnce),
         "fnce_pct": float(st.session_state.fnce_pct),
         "coal_phase_out": bool(st.session_state.cb_coal),
+        "full_horizon": bool(st.session_state.full_horizon),
         "start_date": (
             st.session_state.start_date.isoformat()
             if hasattr(st.session_state.start_date, "isoformat")
@@ -634,6 +636,11 @@ introdujo PyPSA-CL para expansión eléctrica. Aquí hacemos lo mismo: un modelo
         st.checkbox("Meta FNCE (renovables no convencionales)", key="cb_fnce")
         st.number_input("FNCE %:", min_value=0.0, max_value=100.0, key="fnce_pct")
         st.checkbox("Cierre de carbón (phase-out UPME)", key="cb_coal")
+        st.checkbox(
+            "Horizonte completo en redes grandes (STN 144 / OSM 251). "
+            "Sin esto, v3 capa meses/días para que HiGHS quepa en Cloud.",
+            key="full_horizon",
+        )
 
         st.subheader("Configuración de optimización")
         st.selectbox("Solver name", ["highs", "cbc", "gurobi", "cplex"], key="solver_name")
@@ -1337,27 +1344,47 @@ def tab_gui() -> None:
         _tab_gui_motor_b()
 
 
+def _blank_inv_rows(n: int = 5) -> pd.DataFrame:
+    return pd.DataFrame(
+        [{"tipo": "Solar", "zona": "Cesar", "zona_destino": "", "MW": 0.0} for _ in range(n)]
+    )
+
+
+def _add_inv_rows() -> None:
+    extra = _blank_inv_rows(5)
+    cur = st.session_state.get("inv_editor_widget")
+    if cur is None:
+        seed = st.session_state.get("inv_seed")
+        st.session_state.inv_seed = pd.concat([seed, extra], ignore_index=True) if seed is not None else extra
+        return
+    df = pd.DataFrame(cur)
+    if len(df) >= 40:
+        return
+    st.session_state.inv_seed = pd.concat([df, extra], ignore_index=True).head(40)
+
+
 def tab_inversiones() -> None:
     st.markdown(
-        "**Alternativas de inversión en el SIN** (lógica UPME: ¿dónde pongo los MW?). "
-        "Usted ubica eólica, solar, gas, BESS o un refuerzo de red en **subáreas concretas**. "
-        "HiGHS compara el caso base (palancas de la GUI) contra ese portafolio."
+        "**Alternativas de inversión en el SIN — v3** (lógica UPME: ¿dónde pongo los MW?). "
+        "Hasta **40 proyectos** (no 3). El portafolio se aplica a **todos los escenarios × épocas** "
+        "de la cola GUI, no a un solo fondo. Redes: 7 nodos, 18 subáreas, **STN 144** y **OSM 251**."
     )
     st.caption(
-        "Capex MUSD 2024 de orden de magnitud. No es el PGE. Use 18 subáreas para decidir. "
+        "Capex MUSD 2024 de orden de magnitud. No es el PGE. "
         "**Los mapas de Colombia salen abajo, solo después de Comparar** — muestran el efecto "
         "de *estas* inversiones (no el atlas genérico)."
     )
     from pypsa_col.investments import (
         INV_TYPES,
+        MAX_CUSTOM_ITEMS,
         PACKAGES,
         ZONES_18,
-        compare_investments,
+        compare_investments_multi,
     )
 
     net = st.selectbox(
         "Red para el experimento",
-        ["clustered-18", "dashboard-sin"],
+        list(NETWORKS),
         format_func=lambda k: NETWORKS[k]["label"],
         key="inv_network",
     )
@@ -1366,22 +1393,31 @@ def tab_inversiones() -> None:
         from pypsa_col.dashboard_sin import ZONAS
         zones = [f"{k} · {v['label']}" for k, v in ZONAS.items()]
 
-    st.subheader("1. Ubique alternativas en el mapa del SIN")
+    st.subheader("1. Ubique alternativas (más de tres)")
     st.caption(
-        "Cada fila es un proyecto: tipo + zona (y zona destino si es refuerzo de red). "
-        "Ejemplo: Eólica / Guajira / 500 MW · Refuerzo de red / Guajira → Cesar / 800 MW."
+        f"Cada fila es un proyecto. Use **+** al pie de la tabla o el botón para 5 filas más "
+        f"(máximo {MAX_CUSTOM_ITEMS}). Filas con MW = 0 se ignoran. "
+        "Ejemplo: Eólica / Guajira / 500 MW · Refuerzo / Guajira → Cesar / 800 MW."
     )
     default = pd.DataFrame(
         [
             {"tipo": "Eólica", "zona": "Guajira", "zona_destino": "", "MW": 500.0},
+            {"tipo": "Solar", "zona": "Cesar", "zona_destino": "", "MW": 400.0},
+            {"tipo": "Solar", "zona": "Santander", "zona_destino": "", "MW": 300.0},
+            {"tipo": "BESS 4 h", "zona": "Bogotá", "zona_destino": "", "MW": 200.0},
             {"tipo": "Refuerzo de red", "zona": "Guajira", "zona_destino": "Cesar", "MW": 800.0},
+            {"tipo": "Refuerzo de red", "zona": "Atlántico", "zona_destino": "Bogotá", "MW": 600.0},
+            {"tipo": "Gas de respaldo", "zona": "Bolívar", "zona_destino": "", "MW": 0.0},
+            {"tipo": "Cierre carbón (zona)", "zona": "Cesar", "zona_destino": "", "MW": 0.0},
         ]
     )
-    if "inv_editor" not in st.session_state:
-        st.session_state.inv_editor = default
+    if "inv_seed" not in st.session_state:
+        st.session_state.inv_seed = default
+    st.button("Añadir 5 filas vacías", on_click=_add_inv_rows, key="btn_add_inv_rows")
     edited = st.data_editor(
-        st.session_state.inv_editor,
+        st.session_state.inv_seed,
         num_rows="dynamic",
+        height=420,
         **stretch(),
         column_config={
             "tipo": st.column_config.SelectboxColumn("Tipo", options=list(INV_TYPES), required=True),
@@ -1391,7 +1427,6 @@ def tab_inversiones() -> None:
         },
         key="inv_editor_widget",
     )
-    st.session_state.inv_editor = edited
 
     with st.expander("Recetas rápidas (opcional, se suman a la tabla si las marca)"):
         labels = {k: v["label"] for k, v in PACKAGES.items()}
@@ -1411,35 +1446,93 @@ def tab_inversiones() -> None:
         )
     picked = st.session_state.get("inv_pack") or []
 
-    try:
-        levers = _settings_from_widgets()
-    except Exception:
-        levers = {"demand_scenario": "Media - C2", "hydrology_scenario": "Media (histórica XM)"}
-    st.caption(
-        f"Fondo de la GUI: demanda **{levers.get('demand_scenario')}**, "
-        f"hidrología **{levers.get('hydrology_scenario')}**, clima **{levers.get('climate_scenario')}**. "
-        "Cambie el escenario en la pestaña GUI si quiere evaluar la inversión bajo Niño o U3."
-    )
+    study = _all_study_cases()
+    st.subheader("2. Escenarios bajo estudio (cola GUI)")
+    if study:
+        labels = [c.get("_label") or f"{c.get('global_scenario')} · {c.get('name')}" for c in study]
+        st.caption(
+            "El mismo portafolio se resuelve **base vs con inversión** en cada casilla marcada. "
+            "C1 y C3 (o las épocas de la cola) dejan de ser un solo fondo."
+        )
+        st.multiselect(
+            "Aplicar el portafolio a",
+            labels,
+            default=labels,
+            key="inv_cases",
+        )
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "caso": c.get("_label"),
+                        "demanda": c.get("demand_scenario"),
+                        "hidro": c.get("hydrology_scenario"),
+                        "clima": c.get("climate_scenario"),
+                        "años": c.get("representative_years"),
+                        "meses": c.get("representative_months"),
+                        "días": c.get("representative_days"),
+                    }
+                    for c in study
+                ]
+            ),
+            hide_index=True,
+            **stretch(),
+        )
+    else:
+        st.info("No hay cola aún: se usará el escenario que esté en los selectores de la GUI.")
+        st.session_state["inv_cases"] = []
+
     custom = edited.to_dict("records") if edited is not None and not edited.empty else []
+    n_live = sum(1 for r in custom if float(r.get("MW") or 0) > 0 or str(r.get("tipo", "")).startswith("Cierre"))
+    st.caption(f"Proyectos con MW > 0 (o cierre carbón): **{n_live}** (límite {MAX_CUSTOM_ITEMS}).")
     if st.button("Comparar operación base vs este portafolio", type="primary", key="btn_inv"):
-        if not custom and not picked:
-            st.warning("Añada al menos una fila (zona + MW) o una receta.")
+        if n_live == 0 and not picked:
+            st.warning("Añada al menos una fila con MW > 0 o una receta.")
         else:
-            with st.spinner("HiGHS · caso base y caso con inversiones…"):
+            wanted = set(st.session_state.get("inv_cases") or [])
+            cases = [c for c in study if (c.get("_label") in wanted)] if wanted else list(study)
+            if not cases:
                 try:
-                    result = compare_investments(
+                    cases = [_settings_from_widgets()]
+                    cases[0]["name"] = "GUI actual"
+                    cases[0]["global_scenario"] = cases[0].get("global_scenario")
+                except Exception:
+                    cases = [{}]
+            msg = (
+                f"HiGHS · {len(cases)} escenario(s)×época × 2 (base e inversión) "
+                f"en {NETWORKS[net]['label']}…"
+            )
+            with st.spinner(msg):
+                try:
+                    bundle = compare_investments_multi(
                         ROOT,
                         picked,
                         network_key=net,
-                        levers=levers,
+                        cases=cases,
                         solver="highs",
                         custom_items=custom,
                     )
-                    st.session_state["inv_result"] = result
+                    st.session_state["inv_bundle"] = bundle
+                    st.session_state["inv_result"] = bundle.get("primary")
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"No se pudo optimizar: {exc}")
                     return
-    result = st.session_state.get("inv_result")
+    bundle = st.session_state.get("inv_bundle")
+    result = (bundle or {}).get("primary") if bundle else st.session_state.get("inv_result")
+    if bundle and bundle.get("by_case"):
+        st.subheader("Efecto del portafolio en cada escenario bajo estudio")
+        by = pd.DataFrame(bundle["by_case"])
+        st.dataframe(by, hide_index=True, **stretch())
+        plot_cols = [c for c in ("Δopex", "ΔENS_MWh", "ΔFNCE_GWh") if c in by.columns]
+        if plot_cols and "escenario" in by.columns:
+            idx = by.apply(lambda r: f"{r.get('escenario')} · {r.get('época')}", axis=1)
+            chart = by[plot_cols].copy()
+            chart.index = idx
+            plot_series(chart, kind="bar", y_title="Δ (inversión − base)")
+        st.caption(
+            "Δopex < 0 = la operación se abarata en ese mundo. "
+            "Un paquete puede ayudar en C3/Niña y no en C1/Niño: por eso se recorre la cola."
+        )
     if not result:
         st.info("Pulse comparar para ver costo operativo, FNCE y energía no servida.")
         return
@@ -2069,7 +2162,7 @@ def main() -> None:
         if logo.exists():
             st.image(str(logo), **stretch())
     with cols[1]:
-        st.title("PyPSA-col — Long-term Power Systems Planning in Colombia")
+        st.title("PyPSA-col v3 — Long-term Power Systems Planning in Colombia")
         st.caption(
             "SIN · XM DemaReal / CEN · malla OSM · HiGHS  ·  GUI fiel a PyPSA-CL  ·  "
             "esta app **sí corre el solver** (no es el sitio estático de Netlify).  "

@@ -22,17 +22,47 @@ _WIND = np.array(
     [0.55, 0.58, 0.60, 0.62, 0.60, 0.52, 0.42, 0.35, 0.32, 0.30, 0.33, 0.36, 0.40, 0.42, 0.45, 0.48, 0.50, 0.52, 0.55, 0.58, 0.60, 0.58, 0.56, 0.54]
 )
 
-# bus name fragments → 18-subarea or 7-hub labels
+MAX_CUSTOM_ITEMS = 40
+
+# bus name fragments → 18-subarea, 7-hub, STN station, OSM
 _BUS_HINTS = {
-    "guajira": ("Guajira", "GUJ"),
-    "cesar": ("Cesar", "GUJ"),
-    "santander": ("Santander", "NOR"),
-    "bogota": ("Bogotá", "CEN"),
-    "bogotá": ("Bogotá", "CEN"),
-    "atlantico": ("Atlántico", "CAR"),
-    "atlántico": ("Atlántico", "CAR"),
-    "caribe": ("CAR",),
-    "antioquia": ("Antioquia", "NOR"),
+    "guajira": ("Guajira", "GUJ", "Cuestecitas", "Riohacha", "Colectora"),
+    "cesar": ("Cesar", "La Loma", "El Paso", "Copey"),
+    "santander": ("Santander", "NOR", "Ocaña", "Barranca"),
+    "bogota": ("Bogotá", "Bogota", "CEN", "Bacata", "Torca", "Nueva Esperanza"),
+    "bogotá": ("Bogotá", "Bogota", "CEN", "Bacata"),
+    "atlantico": ("Atlántico", "Atlantico", "CAR", "Sabanalarga", "Tebsa"),
+    "atlántico": ("Atlántico", "Atlantico", "CAR", "Sabanalarga"),
+    "caribe": ("CAR", "Caribe", "Sabanalarga"),
+    "antioquia": ("Antioquia", "NOR", "San Carlos", "Cerromatoso", "Porce"),
+    "valle": ("Valle", "Yumbo", "Pance"),
+    "huila": ("Huila", "Betania", "Tesalia"),
+    "bolivar": ("Bolívar", "Bolivar", "Cartagena"),
+    "bolívar": ("Bolívar", "Bolivar"),
+    "magdalena": ("Magdalena", "Fundación", "Santa Marta"),
+    "meta": ("Meta", "Banadia", "Chivor"),
+}
+
+# lon, lat centroids from El Modelo STN (for OSM 251 / nearest bus)
+ZONE_XY = {
+    "Antioquia": (-75.1596, 6.3507),
+    "Atlántico": (-74.9184, 10.2981),
+    "Bogotá": (-74.3874, 5.3794),
+    "Bolívar": (-75.4768, 10.3796),
+    "Boyacá": (-73.3165, 6.3163),
+    "CQR": (-75.6092, 4.8803),
+    "Cauca": (-76.5515, 3.0634),
+    "Cesar": (-73.6931, 10.0935),
+    "Córdoba-Sucre": (-75.6022, 8.6233),
+    "Guajira": (-73.0124, 11.2216),
+    "Huila": (-75.5905, 2.4269),
+    "Magdalena": (-74.1585, 11.0138),
+    "Meta": (-73.7362, 5.3028),
+    "Nariño": (-76.9708, 1.2234),
+    "Norte de Santander": (-72.6948, 7.7786),
+    "Santander": (-73.3817, 6.9533),
+    "Tolima": (-75.3242, 4.0611),
+    "Valle": (-76.1606, 4.0102),
 }
 
 PACKAGES = {
@@ -108,35 +138,124 @@ def _fold(name: str) -> str:
     return str(name).casefold()
 
 
-def _find_bus(n, hint: str) -> str | None:
-    keys = _BUS_HINTS.get(hint.casefold(), (hint,))
+def _zone_key(hint: str) -> str:
+    h = _fold(hint).replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+    for z in ZONE_XY:
+        zf = _fold(z).replace("á", "a").replace("é", "e").replace("í", "i").replace("ó", "o").replace("ú", "u")
+        if h == zf or h in zf or zf in h:
+            return z
+    return hint
+
+
+def _buses_in_zone(n, hint: str) -> list[str]:
+    keys = list(_BUS_HINTS.get(hint.casefold(), ())) + [hint, _zone_key(hint)]
     names = list(n.buses.index.astype(str))
-    folded = [_fold(x) for x in names]
+    hits: list[str] = []
+    if "subarea" in n.buses.columns:
+        sa = n.buses["subarea"].astype(str)
+        for key in keys:
+            k = _fold(key)
+            for name in names:
+                if k and k in _fold(str(sa.get(name, ""))):
+                    hits.append(name)
     for key in keys:
-        k = key.casefold()
-        for name, f in zip(names, folded):
-            if f == k or k in f:
-                return name
+        k = _fold(key)
+        if len(k) < 3:
+            continue
+        for name in names:
+            if k in _fold(name):
+                hits.append(name)
+    # unique preserve order
+    out, seen = [], set()
+    for h in hits:
+        if h not in seen:
+            seen.add(h)
+            out.append(h)
+    return out
+
+
+def _find_bus(n, hint: str) -> str | None:
+    hits = _buses_in_zone(n, hint)
+    if hits:
+        if "v_nom" in n.buses.columns:
+            try:
+                return max(hits, key=lambda b: float(n.buses.at[b, "v_nom"] or 0))
+            except Exception:
+                return hits[0]
+        return hits[0]
+    zone = _zone_key(hint)
+    xy = ZONE_XY.get(zone)
+    if xy is not None and "x" in n.buses.columns and "y" in n.buses.columns:
+        try:
+            dx = n.buses.x.astype(float) - xy[0]
+            dy = n.buses.y.astype(float) - xy[1]
+            return str((dx * dx + dy * dy).astype(float).idxmin())
+        except Exception:
+            pass
+    names = list(n.buses.index.astype(str))
     return names[0] if names else None
 
 
 def _find_link(n, b0: str, b1: str) -> str | None:
-    a = _find_bus(n, b0)
-    b = _find_bus(n, b1)
-    if a is None or b is None or n.links.empty:
+    if n.links.empty:
+        return None
+    a_set = set(_buses_in_zone(n, b0) or ([_find_bus(n, b0)] if _find_bus(n, b0) else []))
+    b_set = set(_buses_in_zone(n, b1) or ([_find_bus(n, b1)] if _find_bus(n, b1) else []))
+    a_set = {x for x in a_set if x}
+    b_set = {x for x in b_set if x}
+    for name, row in n.links.iterrows():
+        ends = {str(row.bus0), str(row.bus1)}
+        if ends & a_set and ends & b_set:
+            return name
+    a, b = _find_bus(n, b0), _find_bus(n, b1)
+    if a is None or b is None:
         return None
     for name, row in n.links.iterrows():
         ends = {_fold(row.bus0), _fold(row.bus1)}
-        if {_fold(a), _fold(b)} <= ends or {_fold(a), _fold(b)} == ends:
-            return name
-        if _fold(a) in ends or _fold(b) in ends:
-            # weaker: any link touching both regions via name fragments
-            pass
-    for name, row in n.links.iterrows():
-        blob = f"{row.bus0} {row.bus1}".casefold()
-        if b0.casefold()[:4] in blob and b1.casefold()[:4] in blob:
+        if {_fold(a), _fold(b)} <= ends:
             return name
     return None
+
+
+def _strengthen_tx(n, zona: str, dest: str, mw: float, key: str) -> dict:
+    """Raise link p_nom or STN/OSM line s_nom between two zones; else add a line."""
+    info: dict = {"bus0": _find_bus(n, zona), "bus1": _find_bus(n, dest)}
+    link = _find_link(n, zona, dest)
+    if link is not None:
+        n.links.at[link, "p_nom"] = float(n.links.at[link, "p_nom"]) + float(mw)
+        info["link"] = link
+        return info
+    a_set = set(_buses_in_zone(n, zona))
+    b_set = set(_buses_in_zone(n, dest))
+    if not a_set and info.get("bus0"):
+        a_set = {info["bus0"]}
+    if not b_set and info.get("bus1"):
+        b_set = {info["bus1"]}
+    touched: list[str] = []
+    if hasattr(n, "lines") and len(n.lines):
+        for name, row in n.lines.iterrows():
+            ends = {str(row.bus0), str(row.bus1)}
+            if ends & a_set and ends & b_set:
+                n.lines.at[name, "s_nom"] = float(row.s_nom) + float(mw)
+                touched.append(str(name))
+    if touched:
+        info["link"] = touched[0]
+        info["lines"] = touched
+        return info
+    a, b = info.get("bus0"), info.get("bus1")
+    if a and b and a != b:
+        lid = f"INV-{key}"
+        try:
+            if hasattr(n, "lines") and len(n.lines) and "s_nom" in n.lines.columns:
+                v = float(n.buses.at[a, "v_nom"]) if "v_nom" in n.buses.columns else 230.0
+                n.add("Line", lid, bus0=a, bus1=b, x=0.08, r=0.008, s_nom=float(mw), v_nom=v)
+            else:
+                n.add("Link", lid, bus0=a, bus1=b, p_nom=float(mw), p_min_pu=-1.0, efficiency=1.0, carrier="transport")
+            info["link"] = lid
+        except Exception:
+            n.add("Link", lid, bus0=a, bus1=b, p_nom=float(mw), p_min_pu=-1.0, efficiency=1.0, carrier="transport")
+            info["link"] = lid
+    return info
 
 
 def apply_packages(n, selected: list[str]) -> list[dict]:
@@ -198,27 +317,12 @@ def apply_packages(n, selected: list[str]) -> list[dict]:
             )
             applied.append({**spec, "id": key, "bus": bus})
         elif kind == "tx":
-            link = _find_link(n, spec["bus0"], spec["bus1"])
-            if link is None and spec.get("alt_bus0"):
-                link = _find_link(n, spec["alt_bus0"], spec.get("alt_bus1", spec["bus1"]))
-            if link is not None:
-                n.links.at[link, "p_nom"] = float(n.links.at[link, "p_nom"]) + float(spec["delta_mw"])
-            elif not n.links.empty:
-                # add a new bidirectional link between the two buses
-                a = _find_bus(n, spec["bus0"])
-                b = _find_bus(n, spec.get("alt_bus1") or spec["bus1"])
-                n.add(
-                    "Link",
-                    f"INV-{key}",
-                    bus0=a,
-                    bus1=b,
-                    p_nom=float(spec["delta_mw"]),
-                    p_min_pu=-1.0,
-                    efficiency=1.0,
-                    carrier="transport",
+            info = _strengthen_tx(n, spec["bus0"], spec["bus1"], float(spec["delta_mw"]), key)
+            if info.get("link") is None and spec.get("alt_bus0"):
+                info = _strengthen_tx(
+                    n, spec["alt_bus0"], spec.get("alt_bus1", spec["bus1"]), float(spec["delta_mw"]), key
                 )
-                link = f"INV-{key}"
-            applied.append({**spec, "id": key, "link": link})
+            applied.append({**spec, "id": key, **info})
         elif kind == "coal_out":
             coal = n.generators.index[n.generators.carrier.isin({"Hard Coal", "Brown Coal", "Coal"})]
             if len(coal):
@@ -283,7 +387,10 @@ INV_TYPES = {
 def apply_custom_items(n, items: list[dict]) -> list[dict]:
     """User-placed alternatives: type + zone (+ dest zone for transmission)."""
     applied = []
-    for i, row in enumerate(items):
+    rows = [r for r in (items or []) if r]
+    if len(rows) > MAX_CUSTOM_ITEMS:
+        rows = rows[:MAX_CUSTOM_ITEMS]
+    for i, row in enumerate(rows):
         tipo = str(row.get("tipo") or row.get("kind") or "").strip()
         spec = INV_TYPES.get(tipo)
         if not spec:
@@ -339,18 +446,13 @@ def apply_custom_items(n, items: list[dict]) -> list[dict]:
                 "note": "almacenamiento en la zona indicada",
             })
         elif kind == "tx" and mw > 0 and zona and dest:
-            link = _find_link(n, zona, dest)
-            if link is not None:
-                n.links.at[link, "p_nom"] = float(n.links.at[link, "p_nom"]) + mw
-            else:
-                a, b = _find_bus(n, zona), _find_bus(n, dest)
-                link = f"INV-{key}"
-                n.add("Link", link, bus0=a, bus1=b, p_nom=mw, p_min_pu=-1.0, efficiency=1.0, carrier="transport")
+            info = _strengthen_tx(n, zona, dest, mw, key)
             applied.append({
                 "label": f"Enlace {zona}–{dest} +{mw:.0f} MW",
-                "id": key, "link": link, "delta_mw": mw,
+                "id": key, "delta_mw": mw,
                 "capex_musd": mw * spec["usd_per_kw"] / 1000.0,
-                "note": "refuerzo o nuevo corredor entre subáreas",
+                "note": "refuerzo o nuevo corredor entre subáreas (links o líneas STN/OSM)",
+                **info,
             })
         elif kind == "coal_zone" and zona:
             bus = _find_bus(n, zona)
@@ -376,14 +478,16 @@ def compare_investments(
     levers: dict | None = None,
     solver: str = "highs",
     custom_items: list[dict] | None = None,
+    draw_maps: bool = True,
 ) -> dict:
     """Solve baseline vs package on a copy of the chosen network."""
     import pypsa
 
-    from .gui_core import patch_linopy_pandas3
+    from .gui_core import NETWORKS, patch_linopy_pandas3
 
     patch_linopy_pandas3()
-    path = resolve_network_nc(root, network_key if network_key in ("clustered-18", "dashboard-sin", "stn-tesis") else "clustered-18")
+    key = network_key if network_key in NETWORKS else "clustered-18"
+    path = resolve_network_nc(root, key)
     base = pypsa.Network()
     base.import_from_netcdf(path)
     if levers:
@@ -395,12 +499,19 @@ def compare_investments(
     applied = apply_packages(inv, selected)
     if custom_items:
         applied = list(applied) + apply_custom_items(inv, custom_items)
+    from pathlib import Path as _P
+
+    threads = 1 if _P("/mount/src").exists() else 2
     kwargs = {
         "solver_name": solver,
-        "solver_options": {"threads": 2},
+        "solver_options": {"threads": threads},
         "include_objective_constant": True,
     }
-    b_status = base.optimize(**kwargs)
+    try:
+        b_status = base.optimize(**kwargs)
+    except TypeError:
+        kwargs.pop("include_objective_constant", None)
+        b_status = base.optimize(**kwargs)
     i_status = inv.optimize(**kwargs)
     k0 = _kpis(base)
     k1 = _kpis(inv)
@@ -415,20 +526,21 @@ def compare_investments(
     fnce_delta = k1["fnce_mwh"] - k0["fnce_mwh"]
     maps: dict[str, str] = {}
     map_dir = ""
-    try:
-        from datetime import datetime as _dt
+    if draw_maps:
+        try:
+            from datetime import datetime as _dt
 
-        from .decision_maps import write_investment_maps
+            from .decision_maps import write_investment_maps
 
-        dest = Path(root) / "outputs" / "investments" / _dt.now().strftime("%Y%m%d_%H%M%S")
-        drawn = write_investment_maps(
-            base, inv, Path(root), dest, applied,
-            heading=f"{network_key} · {len(applied)} alternativas",
-        )
-        maps = {k: str(v) for k, v in drawn.items()}
-        map_dir = str(dest)
-    except Exception as exc:  # noqa: BLE001
-        maps = {"error": str(exc)}
+            dest = Path(root) / "outputs" / "investments" / _dt.now().strftime("%Y%m%d_%H%M%S")
+            drawn = write_investment_maps(
+                base, inv, Path(root), dest, applied,
+                heading=f"{network_key} · {len(applied)} alternativas",
+            )
+            maps = {k: str(v) for k, v in drawn.items()}
+            map_dir = str(dest)
+        except Exception as exc:  # noqa: BLE001
+            maps = {"error": str(exc)}
     return {
         "base_status": str(b_status[0] if isinstance(b_status, tuple) else b_status),
         "inv_status": str(i_status[0] if isinstance(i_status, tuple) else i_status),
@@ -446,6 +558,67 @@ def compare_investments(
         "narrative": explain_investment(
             k0, k1, capex, opex_delta, shed_delta, fnce_delta, applied, levers or {}
         ),
+    }
+
+
+def compare_investments_multi(
+    root: Path,
+    selected: list[str],
+    *,
+    network_key: str = "clustered-18",
+    cases: list[dict],
+    solver: str = "highs",
+    custom_items: list[dict] | None = None,
+) -> dict:
+    """Apply the same portfolio to every scenario × epoch under study."""
+    if not cases:
+        one = compare_investments(
+            root, selected, network_key=network_key, solver=solver, custom_items=custom_items
+        )
+        return {"by_case": [], "primary": one, "n_cases": 1}
+    rows = []
+    primary = None
+    for i, ep in enumerate(cases):
+        r = compare_investments(
+            root,
+            selected,
+            network_key=network_key,
+            levers=ep,
+            solver=solver,
+            custom_items=custom_items,
+            draw_maps=(i == 0),
+        )
+        k0, k1 = r["kpis_base"], r["kpis_inv"]
+        rows.append(
+            {
+                "escenario": ep.get("global_scenario"),
+                "época": ep.get("name"),
+                "año": str(ep.get("start_date") or "")[:4],
+                "demanda": ep.get("demand_scenario"),
+                "hidrología": ep.get("hydrology_scenario"),
+                "base_obj": k0.get("objective"),
+                "inv_obj": k1.get("objective"),
+                "Δopex": r["opex_delta"],
+                "base_ENS_MWh": k0.get("shed_mwh"),
+                "inv_ENS_MWh": k1.get("shed_mwh"),
+                "ΔENS_MWh": r["shed_delta"],
+                "base_FNCE_%": k0.get("fnce_pct"),
+                "inv_FNCE_%": k1.get("fnce_pct"),
+                "ΔFNCE_GWh": r["fnce_delta"] / 1e3,
+                "base_status": r["base_status"],
+                "inv_status": r["inv_status"],
+            }
+        )
+        if primary is None:
+            primary = r
+            primary["levers_used"] = ep
+    return {
+        "by_case": rows,
+        "primary": primary,
+        "n_cases": len(cases),
+        "network": network_key,
+        "applied": (primary or {}).get("applied") or [],
+        "capex_musd": (primary or {}).get("capex_musd") or 0.0,
     }
 
 

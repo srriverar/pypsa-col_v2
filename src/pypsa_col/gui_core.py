@@ -518,24 +518,37 @@ def execute_run(root: Path, user_data: dict, outdir: Path | None = None) -> Path
                 n_epochs=len(epochs),
                 message=f"Figuras osm-interactive · {ep.get('global_scenario')} · {ep.get('name')}",
             )
-            emit_run_figures(
-                n,
-                root,
-                cfg,
-                ep_dir,
-                heading=f"{ep.get('global_scenario')} · {ep.get('name')}",
-            )
+            heavy = int(len(n.buses)) >= 100
+            if heavy:
+                (ep_dir / "figures_skipped.txt").write_text(
+                    "Figuras osm-interactive omitidas en redes ≥100 barras (v3: el LP sí corre).\n",
+                    encoding="utf-8",
+                )
+            else:
+                emit_run_figures(
+                    n,
+                    root,
+                    cfg,
+                    ep_dir,
+                    heading=f"{ep.get('global_scenario')} · {ep.get('name')}",
+                )
         except Exception as exc:
             (ep_dir / "figures_error.txt").write_text(str(exc), encoding="utf-8")
         try:
             from .decision_maps import write_decision_atlas
 
-            write_decision_atlas(
-                n,
-                root,
-                ep_dir,
-                heading=f"{ep.get('global_scenario')} · {ep.get('name')}",
-            )
+            if int(len(n.buses)) >= 200:
+                (ep_dir / "atlas_skipped.txt").write_text(
+                    "Atlas matplotlib omitido en OSM ≥200 barras (v3: el despacho sí se exporta).\n",
+                    encoding="utf-8",
+                )
+            else:
+                write_decision_atlas(
+                    n,
+                    root,
+                    ep_dir,
+                    heading=f"{ep.get('global_scenario')} · {ep.get('name')}",
+                )
         except Exception as exc:
             (ep_dir / "atlas_error.txt").write_text(str(exc), encoding="utf-8")
         all_costs.append(

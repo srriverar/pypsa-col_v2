@@ -204,13 +204,48 @@ def _base_diurnal(n) -> pd.Series:
     return pd.Series(day, index=range(24))
 
 
+def cap_horizon(n, settings: dict) -> tuple[int, int, str]:
+    """Keep large AC meshes solvable (STN ~144 buses, OSM ~251).
+
+    Full 6 months × 7 days × 24 h on 251 buses is a multi-million-row LP.
+    Cap unless ``full_horizon`` is set. Cloud (/mount/src) is stricter.
+    """
+    from pathlib import Path
+
+    n_months = max(1, int(settings.get("representative_months") or 1))
+    n_days = max(1, int(settings.get("representative_days") or 1))
+    n_buses = int(len(getattr(n, "buses", [])))
+    if bool(settings.get("full_horizon")):
+        return n_months, n_days, ""
+    cloud = Path("/mount/src").exists()
+    note = ""
+    if n_buses >= 200:
+        lim_m, lim_d = (1, 2) if cloud else (2, 7)
+        if n_months > lim_m or n_days > lim_d:
+            note = (
+                f"Red grande ({n_buses} barras): horizonte capado a "
+                f"{min(n_months, lim_m)} mes(es) × {min(n_days, lim_d)} día(s). "
+                "Marque «Horizonte completo» para forzar el original."
+            )
+        n_months, n_days = min(n_months, lim_m), min(n_days, lim_d)
+    elif n_buses >= 80:
+        lim_m, lim_d = (2, 7) if cloud else (6, 7)
+        if n_months > lim_m or n_days > lim_d:
+            note = (
+                f"El Modelo STN ({n_buses} barras): horizonte capado a "
+                f"{min(n_months, lim_m)} mes(es) × {min(n_days, lim_d)} día(s) "
+                "para que HiGHS quepa en RAM. «Horizonte completo» desactiva el tope."
+            )
+        n_months, n_days = min(n_months, lim_m), min(n_days, lim_d)
+    return n_months, n_days, note
+
+
 def expand_representative_year(n, settings: dict) -> dict:
     """Replace snapshots with representative months × day types; set weightings.
 
     Call on a freshly loaded network (24 h). Idempotent if already expanded.
     """
-    n_months = int(settings.get("representative_months") or 1)
-    n_days = int(settings.get("representative_days") or 1)
+    n_months, n_days, cap_note = cap_horizon(n, settings)
     year = epoch_year(settings)
     months = selected_months(n_months)
     types = day_types(n_days)
@@ -223,6 +258,7 @@ def expand_representative_year(n, settings: dict) -> dict:
             "months": months,
             "day_types": [t[0] for t in types],
             "already_expanded": True,
+            "cap_note": cap_note,
         }
 
     diurnal = _base_diurnal(n)
@@ -327,6 +363,7 @@ def expand_representative_year(n, settings: dict) -> dict:
         "weight_sum_hours": float(w.sum()),
         "already_expanded": False,
         "year": year,
+        "cap_note": cap_note,
     }
 
 
